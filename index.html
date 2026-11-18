@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>Pulseras – Cobro</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root { --bg:#0f1115; --card:#1a1d24; --line:#2a2f3a; --txt:#f2f3f5; --mute:#9aa1ad;
+          --acc:#7c5cff; --ok:#1fbf75; --err:#ff4d5e; }
+  * { box-sizing:border-box; margin:0; padding:0; font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif; }
+  body { background:var(--bg); color:var(--txt); min-height:100vh; padding:16px; max-width:520px; margin:0 auto; }
+  h1 { font-size:22px; margin-bottom:4px; }
+  .mute { color:var(--mute); font-size:14px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:16px; padding:16px; margin-top:16px; }
+  input { width:100%; padding:14px; border-radius:12px; border:1px solid var(--line); background:#0c0e12; color:var(--txt); font-size:17px; margin-top:10px; }
+  button { width:100%; padding:16px; border:0; border-radius:12px; background:var(--acc); color:#fff; font-size:18px; font-weight:600; margin-top:12px; cursor:pointer; }
+  button:disabled { opacity:.5; }
+  button.sec { background:transparent; border:1px solid var(--line); color:var(--mute); font-size:15px; padding:12px; }
+  .tabs { display:flex; gap:8px; margin-top:16px; }
+  .tabs button { margin:0; padding:12px 6px; font-size:15px; background:var(--card); border:1px solid var(--line); color:var(--mute); }
+  .tabs button.on { background:var(--acc); color:#fff; border-color:var(--acc); }
+  .grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:10px; }
+  .prod { background:#0c0e12; border:2px solid var(--line); border-radius:14px; padding:16px 10px; text-align:center; cursor:pointer; }
+  .prod.on { border-color:var(--acc); background:#1d1838; }
+  .prod b { display:block; font-size:17px; }
+  .prod span { color:var(--mute); }
+  .qty { display:flex; align-items:center; justify-content:center; gap:18px; margin-top:14px; }
+  .qty button { width:56px; margin:0; padding:10px; font-size:24px; }
+  .qty div { font-size:28px; font-weight:700; min-width:40px; text-align:center; }
+  .total { text-align:center; font-size:30px; font-weight:800; margin-top:10px; }
+  .quick { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; }
+  .quick button { margin-top:10px; padding:12px 0; font-size:16px; background:#0c0e12; border:1px solid var(--line); }
+  .hidden { display:none !important; }
+  #overlay { position:fixed; inset:0; background:rgba(0,0,0,.85); display:flex; flex-direction:column; align-items:center; justify-content:center; padding:24px; text-align:center; z-index:10; }
+  #overlay .big { font-size:72px; }
+  #overlay p { font-size:22px; margin:16px 0; }
+  #overlay button { max-width:320px; }
+  .res { border-radius:16px; padding:22px; text-align:center; margin-top:16px; font-size:20px; font-weight:700; }
+  .res.ok { background:rgba(31,191,117,.15); border:2px solid var(--ok); color:var(--ok); }
+  .res.err { background:rgba(255,77,94,.15); border:2px solid var(--err); color:var(--err); }
+  .res small { display:block; color:var(--txt); font-weight:400; font-size:16px; margin-top:6px; }
+  details { margin-top:18px; }
+  summary { color:var(--mute); font-size:14px; cursor:pointer; }
+</style>
+</head>
+<body>
+
+<!-- ========== LOGIN ========== -->
+<div id="vLogin">
+  <h1>🎟️ Pulseras</h1>
+  <p class="mute">Entra con tu usuario de trabajador</p>
+  <div class="card">
+    <input id="email" type="email" placeholder="Correo" autocomplete="username">
+    <input id="pass" type="password" placeholder="Contraseña" autocomplete="current-password">
+    <button id="btnLogin">Entrar</button>
+    <div id="loginMsg"></div>
+  </div>
+</div>
+
+<!-- ========== APP ========== -->
+<div id="vApp" class="hidden">
+  <h1>🎟️ Pulseras</h1>
+  <p class="mute" id="quien"></p>
+
+  <div class="tabs">
+    <button data-tab="cobrar">🍺 Cobrar</button>
+    <button data-tab="recargar">💵 Recargar</button>
+    <button data-tab="saldo">🔍 Saldo</button>
+  </div>
+
+  <!-- COBRAR -->
+  <div id="tCobrar" class="card hidden">
+    <p class="mute">1. Elige el producto</p>
+    <div class="grid" id="productos"></div>
+    <div class="qty">
+      <button class="sec" id="menos">−</button>
+      <div id="cant">1</div>
+      <button class="sec" id="mas">+</button>
+    </div>
+    <div class="total" id="total">$0</div>
+    <button id="btnCobrar" disabled>2. Cobrar con pulsera</button>
+  </div>
+
+  <!-- RECARGAR -->
+  <div id="tRecargar" class="card hidden">
+    <p class="mute">¿Cuánto quiere recargar?</p>
+    <div class="quick">
+      <button data-m="100">$100</button><button data-m="200">$200</button>
+      <button data-m="300">$300</button><button data-m="500">$500</button>
+    </div>
+    <input id="monto" type="number" inputmode="numeric" placeholder="Otra cantidad">
+    <button id="btnRecargar">Recargar pulsera</button>
+  </div>
+
+  <!-- SALDO -->
+  <div id="tSaldo" class="card hidden">
+    <p class="mute">Consulta cuánto saldo tiene una pulsera</p>
+    <button id="btnSaldo">Leer pulsera</button>
+  </div>
+
+  <div id="resultado"></div>
+
+  <details>
+    <summary>🧪 Modo prueba (sin pulsera)</summary>
+    <p class="mute" style="margin-top:8px">Escribe cualquier código para simular una pulsera. Déjalo vacío para usar la pulsera real.</p>
+    <input id="uidPrueba" placeholder="Ej: PRUEBA-001">
+  </details>
+
+  <button class="sec" id="btnSalir" style="margin-top:24px">Cerrar sesión</button>
+</div>
+
+<!-- ========== PANTALLA "ACERCA LA PULSERA" ========== -->
+<div id="overlay" class="hidden">
+  <div class="big">📲</div>
+  <p>Acerca la pulsera<br>a la parte de atrás del celular</p>
+  <button class="sec" id="btnCancelar">Cancelar</button>
+</div>
+
+<script>
+// ===== CONFIGURACIÓN (llave pública, es seguro que esté aquí) =====
+const SUPABASE_URL = 'https://hgslsmlqjdcyzktjmvwd.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_Ro09PCl485w1di3GDRFOqA_zLDNsEcn';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+const $ = (id) => document.getElementById(id);
+let rol = null, productos = [], prodSel = null, cantidad = 1, lectorCtrl = null;
+
+// ===== LOGIN =====
+$('btnLogin').onclick = async () => {
+  $('btnLogin').disabled = true;
+  $('loginMsg').innerHTML = '';
+  const { error } = await sb.auth.signInWithPassword({
+    email: $('email').value.trim(), password: $('pass').value
+  });
+  $('btnLogin').disabled = false;
+  if (error) return $('loginMsg').innerHTML = res(false, 'Correo o contraseña incorrectos');
+  iniciar();
+};
+
+$('btnSalir').onclick = async () => { await sb.auth.signOut(); location.reload(); };
+
+async function iniciar() {
+  const { data: { session } } = await sb.auth.getSession();
+  if (!session) return;
+  const { data, error } = await sb.rpc('mi_rol');
+  if (error || !data) {
+    $('loginMsg').innerHTML = res(false, 'Tu usuario no está dado de alta como trabajador');
+    await sb.auth.signOut();
+    return;
+  }
+  rol = data;
+  $('vLogin').classList.add('hidden');
+  $('vApp').classList.remove('hidden');
+  $('quien').textContent = session.user.email + ' · ' + rol.toUpperCase();
+
+  // Mostrar solo las pestañas que le tocan a cada rol
+  const permisos = { admin:['cobrar','recargar','saldo'], barra:['cobrar','saldo'], taquilla:['recargar','saldo'] };
+  document.querySelectorAll('.tabs button').forEach(b => {
+    if (!permisos[rol].includes(b.dataset.tab)) b.classList.add('hidden');
+    b.onclick = () => abrirTab(b.dataset.tab);
+  });
+  abrirTab(permisos[rol][0]);
+  cargarProductos();
+}
+
+function abrirTab(t) {
+  document.querySelectorAll('.tabs button').forEach(b => b.classList.toggle('on', b.dataset.tab === t));
+  $('tCobrar').classList.toggle('hidden', t !== 'cobrar');
+  $('tRecargar').classList.toggle('hidden', t !== 'recargar');
+  $('tSaldo').classList.toggle('hidden', t !== 'saldo');
+  $('resultado').innerHTML = '';
+}
+
+// ===== PRODUCTOS =====
+async function cargarProductos() {
+  const { data } = await sb.from('productos').select('id,nombre,precio').eq('activo', true).order('id');
+  productos = data || [];
+  $('productos').innerHTML = productos.map(p =>
+    `<div class="prod" data-id="${p.id}"><b>${p.nombre}</b><span>$${Number(p.precio)}</span></div>`).join('');
+  document.querySelectorAll('.prod').forEach(el => el.onclick = () => {
+    prodSel = productos.find(p => p.id == el.dataset.id);
+    document.querySelectorAll('.prod').forEach(x => x.classList.toggle('on', x === el));
+    actualizarTotal();
+  });
+}
+$('menos').onclick = () => { if (cantidad > 1) cantidad--; actualizarTotal(); };
+$('mas').onclick = () => { if (cantidad < 20) cantidad++; actualizarTotal(); };
+function actualizarTotal() {
+  $('cant').textContent = cantidad;
+  $('total').textContent = '$' + (prodSel ? prodSel.precio * cantidad : 0);
+  $('btnCobrar').disabled = !prodSel;
+}
+
+// ===== LEER PULSERA (NFC) =====
+async function leerPulsera() {
+  const prueba = $('uidPrueba').value.trim();
+  if (prueba) return prueba.toUpperCase();
+  if (!('NDEFReader' in window)) {
+    throw new Error('Este celular o navegador no lee NFC. Usa Chrome en Android, o el modo prueba.');
+  }
+  $('overlay').classList.remove('hidden');
+  lectorCtrl = new AbortController();
+  const lector = new NDEFReader();
+  try {
+    await lector.scan({ signal: lectorCtrl.signal });
+    return await new Promise((resolve, reject) => {
+      lector.onreading = (e) => {
+        if (!e.serialNumber) return reject(new Error('No se pudo leer el número de la pulsera'));
+        resolve(e.serialNumber.toUpperCase());
+      };
+      lector.onreadingerror = () => reject(new Error('No se pudo leer, acércala otra vez'));
+      lectorCtrl.signal.addEventListener('abort', () => reject(new Error('Cancelado')));
+    });
+  } finally {
+    lectorCtrl.abort();
+    $('overlay').classList.add('hidden');
+  }
+}
+$('btnCancelar').onclick = () => lectorCtrl && lectorCtrl.abort();
+
+// ===== ACCIONES =====
+async function accion(boton, fn) {
+  boton.disabled = true;
+  $('resultado').innerHTML = '';
+  try {
+    const uid = await leerPulsera();
+    const html = await fn(uid);
+    $('resultado').innerHTML = html;
+    vibrar(true);
+  } catch (e) {
+    $('resultado').innerHTML = res(false, limpiar(e.message));
+    vibrar(false);
+  }
+  boton.disabled = false;
+  if (boton === $('btnCobrar')) boton.disabled = !prodSel;
+}
+
+$('btnCobrar').onclick = () => accion($('btnCobrar'), async (uid) => {
+  const { data, error } = await sb.rpc('cobrar', { p_uid: uid, p_producto_id: prodSel.id, p_cantidad: cantidad });
+  if (error) throw error;
+  const txt = `${cantidad} × ${prodSel.nombre} = $${prodSel.precio * cantidad}`;
+  cantidad = 1; actualizarTotal();
+  return res(true, '✅ Cobrado', txt + '<br>Saldo restante: $' + Number(data));
+});
+
+document.querySelectorAll('[data-m]').forEach(b => b.onclick = () => $('monto').value = b.dataset.m);
+$('btnRecargar').onclick = () => {
+  const monto = Number($('monto').value);
+  if (!monto || monto <= 0) return $('resultado').innerHTML = res(false, 'Escribe una cantidad');
+  accion($('btnRecargar'), async (uid) => {
+    const { data, error } = await sb.rpc('recargar', { p_uid: uid, p_monto: monto });
+    if (error) throw error;
+    $('monto').value = '';
+    return res(true, '✅ Recarga de $' + monto, 'Saldo nuevo: $' + Number(data));
+  });
+};
+
+$('btnSaldo').onclick = () => accion($('btnSaldo'), async (uid) => {
+  const { data, error } = await sb.rpc('consultar_saldo', { p_uid: uid });
+  if (error) throw error;
+  if (data === null) return res(false, 'Pulsera sin registrar', 'Primero hay que recargarla');
+  return res(true, 'Saldo: $' + Number(data), 'Pulsera ' + uid);
+});
+
+// ===== AYUDANTES =====
+function res(ok, titulo, detalle = '') {
+  return `<div class="res ${ok ? 'ok' : 'err'}">${titulo}${detalle ? '<small>' + detalle + '</small>' : ''}</div>`;
+}
+function limpiar(m) { return (m || 'Error').replace(/^.*?exception:\s*/i, ''); }
+function vibrar(ok) { if (navigator.vibrate) navigator.vibrate(ok ? 120 : [80, 60, 80, 60, 80]); }
+
+iniciar();
+</script>
+</body>
+</html>
